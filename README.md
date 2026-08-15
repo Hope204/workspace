@@ -1,4 +1,4 @@
-# Minh Phát Workspace
+# Thành Danh Workspace
 
 Giao diện frontend quản lý Workspace, kế hoạch và công việc nội bộ, xây bằng Next.js App Router, TypeScript, Tailwind CSS và mock data.
 
