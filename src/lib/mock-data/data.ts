@@ -1,0 +1,26 @@
+import type { Department, Plan, Task, User, Workspace } from "@/types/domain";
+const stamp = { createdAt: "2026-08-01", updatedAt: "2026-08-15" };
+export const departments: Department[] = ["BOD","OM","Tech","BA","QA","Sản xuất","Kế toán"].map((name, i) => ({ id:`d${i}`,code:`PB-${String(i+1).padStart(2,"0")}`,name,status:"Hoạt động",...stamp }));
+export const users: User[] = [
+ ["u1","Nguyễn Minh Quân","NQ","OM/Manager","d1"],["u2","Trần Thu Hà","TH","BOD/Approver","d0"],["u3","Lê Quốc Việt","LV","Tech Lead","d2"],["u4","Phạm Ngọc Anh","PA","BA","d3"],["u5","Vũ Hoàng Nam","VN","QA Lead","d4"],["u6","Đặng Mai Linh","ML","Sản xuất","d5"],["u7","Ngô Thanh Bình","NB","Kế toán","d6"],["u8","Hoàng Gia Bảo","HB","Developer","d2"]
+].map(([id,name,initials,role,departmentId])=>({id,name,initials,role,departmentId,email:`${id}@minhphat.vn`,code:id.toUpperCase(),...stamp}));
+export const workspaces: Workspace[] = [
+ ["ws1","WS-ERP-001","ERP & AI Platform","Chuẩn hóa nền tảng ERP và trợ lý AI nội bộ","Chương trình","u1",["u1","u2","u3","u4","u5"],6,18,64,"Hoạt động","2026-10-30"],
+ ["ws2","WS-PROD-001","Phòng Sản xuất","Tối ưu hóa quy trình sản xuất in ấn","Phòng ban","u6",["u1","u6","u5"],3,9,47,"Hoạt động","2026-09-25"],
+ ["ws3","WS-SALES-001","Phòng Kinh doanh","Kế hoạch chuyển đổi CRM và doanh số","Phòng ban","u1",["u1","u4"],2,5,72,"Hoạt động","2026-09-10"],
+ ["ws4","WS-M00-001","Triển khai Module M00","Khởi tạo master data ERP","Dự án","u1",["u1","u3","u4"],4,11,58,"Hoạt động","2026-09-30"],
+ ["ws5","WS-M01-001","Triển khai Module M01","Quản lý đơn hàng và sản xuất","Dự án","u1",["u1","u3","u5","u6"],3,7,35,"Hoạt động","2026-10-15"]
+].map(([id,code,name,description,type,ownerId,memberIds,planCount,openTasks,progress,status,deadline])=>({id,code,name,description,type,ownerId,memberIds,planCount,openTasks,progress,status,deadline,...stamp} as Workspace));
+const plansRaw = [
+ ["p1","KH-ERP-M00-001","Kế hoạch triển khai Master Data M00","ws1","M00",undefined,"u1","d1","2026-08-01","2026-09-20",68,"Đang thực hiện","Cao"],
+ ["p2","KH-ERP-M00-002","Chuẩn hóa danh mục khách hàng","ws1","M00","p1","u4","d3","2026-08-04","2026-08-18",85,"Đang thực hiện","Cao"],
+ ["p3","KH-ERP-M01-001","Triển khai quản lý đơn hàng M01","ws5","M01",undefined,"u3","d2","2026-08-10","2026-10-15",35,"Đang thực hiện","Cao"],
+ ["p4","KH-AI-001","AI trợ lý tra cứu SOP","ws1","AI",undefined,"u3","d2","2026-08-05","2026-09-30",52,"Chờ duyệt","Trung bình"],
+ ["p5","KH-PROD-001","Số hóa lệnh sản xuất","ws2","Sản xuất",undefined,"u6","d5","2026-08-01","2026-09-25",47,"Đang thực hiện","Cao"],
+ ["p6","KH-SALES-001","Chuẩn hóa pipeline kinh doanh","ws3","CRM",undefined,"u4","d3","2026-08-01","2026-09-10",72,"Chờ nghiệm thu","Trung bình"],
+ ["p7","KH-ERP-M01-002","Kiểm thử tích hợp M01","ws5","M01","p3","u5","d4","2026-08-15","2026-09-30",15,"Nháp","Cao"],
+ ["p8","KH-FIN-001","Đối soát chi phí sản xuất","ws2","Finance",undefined,"u7","d6","2026-08-03","2026-08-12",100,"Hoàn thành","Thấp"]
+];
+export const plans: Plan[] = plansRaw.map(([id,code,name,workspaceId,module,parentId,ownerId,departmentId,startDate,deadline,progress,status,priority])=>({id:id as string,code:code as string,name:name as string,workspaceId:workspaceId as string,module:module as string,parentId:parentId as string|undefined,ownerId:ownerId as string,departmentId:departmentId as string,startDate:startDate as string,deadline:deadline as string,progress:progress as number,status:status as Plan["status"],priority:priority as Plan["priority"],projectId:undefined,objective:"Hoàn thiện quy trình, dữ liệu và năng lực vận hành theo mục tiêu chuyển đổi số.",scope:"Các đơn vị liên quan trong phạm vi triển khai.",output:"Tài liệu nghiệm thu, dữ liệu chuẩn hóa và hướng dẫn sử dụng.",approverId:"u2",...stamp}));
+const statuses: Task["status"][]=["Đang thực hiện","Chưa thực hiện","Chờ phối hợp","Chờ duyệt","Hoàn thành","Bị chặn","Đang thực hiện","Hoàn thành","Chưa thực hiện","Chờ phản hồi","Đang thực hiện","Hoàn thành","Chờ duyệt","Bị chặn","Chưa thực hiện","Hoàn thành","Đang thực hiện","Chờ phối hợp","Hoàn thành","Chưa thực hiện","Đang thực hiện","Hoàn thành","Chờ duyệt","Chưa thực hiện","Hoàn thành"];
+export const tasks: Task[] = Array.from({length:25},(_,i)=>{const plan=plans[i%plans.length];const n=i+1;return {id:`t${n}`,code:`TASK-${plan.module}-${String(n).padStart(3,"0")}`,name:["Rà soát dữ liệu nguồn","Chuẩn hóa quy trình phê duyệt","Thiết kế biểu mẫu nhập liệu","Kiểm thử nghiệp vụ","Đào tạo người dùng","Xử lý sai lệch dữ liệu"][i%6],planId:plan.id,workspaceId:plan.workspaceId,ownerId:users[(i+2)%users.length].id,collaboratorIds:["u4","u5"],status:statuses[i],priority:i%5===0?"Cao":i%3===0?"Thấp":"Trung bình",startDate:"2026-08-05",deadline:i%6===0?"2026-08-12":`2026-08-${String(18+i%12).padStart(2,"0")}`,progress:statuses[i]==="Hoàn thành"?100:(i*13)%90,checklistDone:i%4===0?2:1,checklistTotal:2,comments:i%4,files:i%3,labels:i%2?["ERP","Dữ liệu"]:["Ưu tiên"],blockedReason:statuses[i]==="Bị chặn"?"Chờ xác nhận nghiệp vụ từ đơn vị sử dụng":undefined,actualResult:statuses[i]==="Hoàn thành"?"Đã hoàn tất và bàn giao kết quả theo kế hoạch.":undefined,...stamp}});
