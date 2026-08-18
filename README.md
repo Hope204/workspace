@@ -1,21 +1,21 @@
 # Thành Danh Workspace
 
-Giao diện frontend quản lý Workspace, kế hoạch và công việc nội bộ, xây bằng Next.js App Router, TypeScript, Tailwind CSS và mock data.
+Ứng dụng quản lý Workspace, kế hoạch và công việc nội bộ. Frontend dùng Next.js App Router, TypeScript, Tailwind CSS, Zustand, TanStack và dnd-kit; REST API dùng Drizzle ORM với PostgreSQL Neon.
 
 ## Chạy dự án
 
-```bash
-npm install
-npm run dev
-```
+1. Sao chép `.env.example` thành `.env.local` và đặt chuỗi kết nối Neon vào `DATABASE_URL`.
+2. Cài package: `npm install`.
+3. Đồng bộ schema database: `npm run db:push`.
+4. Chạy môi trường phát triển: `npm run dev`.
 
 Mở `http://localhost:3000`.
 
-## Kiểm tra chất lượng
+## Kiểm tra
 
 ```bash
 npm run lint
 npm run build
 ```
 
-Mock domain nằm trong `src/types`, `src/lib/mock-data`; UI chính nằm ở `src/components/workspace-app.tsx`. Các dependency dnd-kit, React Hook Form/Zod, Recharts, TanStack Query/Table và Zustand đã được cài để mở rộng theo feature/API thật.
+Mock domain nằm trong `src/types` và `src/lib/mock-data`. API và database nằm trong `src/app/api`, `src/db`, `src/lib/api`. Xem danh sách REST endpoint và quy tắc nghiệp vụ tại [docs/API.md](docs/API.md).

@@ -9,8 +9,8 @@ export function PlanWorkflowDialog({ plan, onClose }: { plan: Plan; onClose: () 
   const transition = useWorkspaceStore((state) => state.transitionPlan);
   const activities = useWorkspaceStore((state) => state.activities).filter((item) => item.entityId === plan.id);
   const [note, setNote] = useState("");
-  const run = (status: Plan["status"]) => {
-    const result = transition(plan.id, status, note);
+  const run = async (status: Plan["status"]) => {
+    const result = await transition(plan.id, status, note);
     if (!result.ok) { toast.error(result.message); return; }
     toast.success(`Đã chuyển kế hoạch sang “${status}”`);
     onClose();

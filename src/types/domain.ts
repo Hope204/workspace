@@ -1,5 +1,5 @@
 export type PlanStatus = "Nháp" | "Chờ duyệt" | "Đã duyệt" | "Đang thực hiện" | "Tạm dừng" | "Chờ nghiệm thu" | "Hoàn thành" | "Đóng" | "Từ chối" | "Hủy";
-export type TaskStatus = "Chưa thực hiện" | "Đang thực hiện" | "Chờ phối hợp" | "Chờ phản hồi" | "Chờ duyệt" | "Bị chặn" | "Hoàn thành" | "Làm lại" | "Đóng" | "Hủy";
+export type TaskStatus = "Chưa thực hiện" | "Đang thực hiện" | "Cần hỗ trợ" | "Chờ phối hợp" | "Chờ phản hồi" | "Chờ duyệt" | "Bị chặn" | "Hoàn thành" | "Làm lại" | "Đóng" | "Hủy";
 export type Priority = "Cao" | "Trung bình" | "Thấp";
 export interface Entity { id: string; code: string; createdAt: string; updatedAt: string }
 export interface Department extends Entity { name: string; status: "Hoạt động" | "Ngừng" }
@@ -10,7 +10,7 @@ export interface Project extends Entity { name: string; workspaceId: string; sta
 export interface PlanObjective extends Entity { planId: string; content: string; metric?: string; status: "Hoạt động" | "Đóng" }
 export interface Plan extends Entity { name: string; workspaceId: string; projectId?: string; module: string; parentId?: string; ownerId: string; departmentId: string; startDate: string; deadline: string; progress: number; status: PlanStatus; priority: Priority; objective: string; scope: string; output: string; approverId: string }
 export interface WorkGroup extends Entity { planId: string; name: string; status: PlanStatus }
-export interface Task extends Entity { name: string; planId: string; workspaceId: string; ownerId: string; collaboratorIds: string[]; status: TaskStatus; priority: Priority; startDate: string; deadline: string; progress: number; checklistDone: number; checklistTotal: number; comments: number; files: number; labels: string[]; note?: string; attachmentNames?: string[]; checklistItems?: string[]; blockedReason?: string; actualResult?: string }
+export interface Task extends Entity { name: string; planId: string; workspaceId: string; ownerId: string; assigneeId?: string; collaboratorIds: string[]; status: TaskStatus; priority: Priority; startDate: string; deadline: string; progress: number; checklistDone: number; checklistTotal: number; comments: number; files: number; labels: string[]; note?: string; attachmentNames?: string[]; checklistItems?: string[]; blockedReason?: string; actualResult?: string }
 export interface TaskAssignee extends Entity { taskId: string; userId: string; role: "Chính" | "Phối hợp" | "Theo dõi" | "Duyệt" }
 export interface Subtask extends Entity { taskId: string; name: string; status: TaskStatus; completed: boolean }
 export interface ChecklistItem extends Entity { taskId: string; content: string; required: boolean; completed: boolean }

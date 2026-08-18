@@ -1,93 +1,78 @@
 import { create } from "zustand";
-import { plans as initialPlans, tasks as initialTasks, workspaces as initialWorkspaces } from "@/lib/mock-data/data";
+import { http } from "@/services/api-client";
 import type { ActivityLog, Approval, Plan, Task, Workspace } from "@/types/domain";
 
 type WorkspaceInput = Pick<Workspace, "name" | "description" | "type"> & Partial<Pick<Workspace, "departmentId" | "departmentIds" | "ownerId" | "memberIds">>;
 type PlanInput = Pick<Plan, "name" | "workspaceId" | "startDate" | "deadline" | "priority">;
-type TaskInput = Pick<Task, "name" | "planId" | "workspaceId" | "ownerId" | "deadline" | "priority"> & Partial<Pick<Task, "note" | "attachmentNames" | "checklistItems" | "checklistDone" | "checklistTotal" | "files">>;
+type TaskInput = Pick<Task, "name" | "planId" | "workspaceId" | "ownerId" | "deadline" | "priority"> & Partial<Pick<Task, "assigneeId" | "note" | "attachmentNames" | "checklistItems" | "collaboratorIds">>;
+type Row = Record<string, unknown>;
 
 interface WorkspaceStore {
-  workspaces: Workspace[];
-  plans: Plan[];
-  tasks: Task[];
-  approvals: Approval[];
-  activities: ActivityLog[];
-  createWorkspace: (input: WorkspaceInput) => void;
-  updateWorkspace: (id: string, input: WorkspaceInput) => void;
-  deleteWorkspace: (id: string) => void;
-  createPlan: (input: PlanInput) => void;
-  updatePlan: (id: string, input: Partial<Plan>) => void;
-  deletePlan: (id: string) => void;
-  createTask: (input: TaskInput) => void;
-  updateTask: (id: string, input: Partial<Task>) => void;
-  deleteTask: (id: string) => void;
-  transitionPlan: (id: string, status: Plan["status"], note: string) => { ok: boolean; message?: string };
+  workspaces: Workspace[]; plans: Plan[]; tasks: Task[]; approvals: Approval[]; activities: ActivityLog[];
+  hydrate: () => Promise<void>;
+  createWorkspace: (input: WorkspaceInput) => Promise<void>; updateWorkspace: (id: string, input: WorkspaceInput) => Promise<void>; deleteWorkspace: (id: string) => Promise<void>;
+  createPlan: (input: PlanInput) => Promise<void>; updatePlan: (id: string, input: Partial<Plan>) => Promise<void>; deletePlan: (id: string) => Promise<void>;
+  createTask: (input: TaskInput) => Promise<void>; updateTask: (id: string, input: Partial<Task>) => Promise<void>; deleteTask: (id: string) => Promise<void>;
+  transitionPlan: (id: string, status: Plan["status"], note: string) => Promise<{ ok: boolean; message?: string }>;
 }
 
-const now = "2026-08-15";
-const uid = () => crypto.randomUUID();
-const withSummaries = (workspaces: Workspace[], plans: Plan[], tasks: Task[]) => ({
-  workspaces: workspaces.map((workspace) => {
-    const relatedPlans = plans.filter((plan) => plan.workspaceId === workspace.id);
-    const relatedTasks = tasks.filter((task) => task.workspaceId === workspace.id);
-    const progress = relatedTasks.length
-      ? Math.round(relatedTasks.reduce((total, task) => total + task.progress, 0) / relatedTasks.length)
-      : 0;
-    return { ...workspace, planCount: relatedPlans.length, openTasks: relatedTasks.filter((task) => !["Hoàn thành", "Đóng", "Hủy"].includes(task.status)).length, progress };
-  }),
-  plans: plans.map((plan) => {
-    const relatedTasks = tasks.filter((task) => task.planId === plan.id);
-    const progress = relatedTasks.length ? Math.round(relatedTasks.reduce((total, task) => total + task.progress, 0) / relatedTasks.length) : 0;
-    return { ...plan, progress };
-  }),
-  tasks,
+const date = (value: unknown) => typeof value === "string" ? value.slice(0, 10) : "";
+const text = (value: unknown) => typeof value === "string" ? value : "";
+const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+const code = (prefix: string) => `${prefix}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+let hydrateRequest = 0;
+const workspaceFrom = (row: Row): Workspace => ({ id: text(row.id), code: text(row.code), name: text(row.name), description: text(row.description), type: text(row.type), ownerId: text(row.ownerId), memberIds: [], planCount: 0, openTasks: 0, progress: 0, status: (text(row.status) || "Hoạt động") as Workspace["status"], deadline: date(row.deadline), createdAt: date(row.createdAt), updatedAt: date(row.updatedAt) });
+const planFrom = (row: Row): Plan => ({ id: text(row.id), code: text(row.code), name: text(row.name), workspaceId: text(row.workspaceId), projectId: text(row.projectId) || undefined, module: text(row.module), parentId: text(row.parentId) || undefined, ownerId: text(row.ownerId), departmentId: "", startDate: date(row.startDate), deadline: date(row.deadline), progress: Number(row.progress ?? 0), status: text(row.status) as Plan["status"], priority: text(row.priority) as Plan["priority"], objective: text(row.objective), scope: text(row.scope), output: text(row.output), approverId: text(row.approverId), createdAt: date(row.createdAt), updatedAt: date(row.updatedAt) });
+const taskFrom = (row: Row): Task => ({ id: text(row.id), code: text(row.code), name: text(row.name), planId: text(row.planId), workspaceId: text(row.workspaceId), ownerId: text(row.ownerId), assigneeId: text(row.assigneeId) || strings(row.collaboratorIds)[0] || text(row.ownerId), collaboratorIds: strings(row.collaboratorIds), status: text(row.status) as Task["status"], priority: text(row.priority) as Task["priority"], startDate: date(row.startDate), deadline: date(row.deadline), progress: Number(row.progress ?? 0), checklistDone: 0, checklistTotal: 0, comments: 0, files: 0, labels: [], note: text(row.note) || undefined, blockedReason: text(row.blockedReason) || undefined, actualResult: text(row.actualResult) || undefined, createdAt: date(row.createdAt), updatedAt: date(row.updatedAt) });
+const summarize = (workspaces: Workspace[], plans: Plan[], tasks: Task[]) => ({
+  workspaces: workspaces.map((workspace) => { const relatedPlans = plans.filter((plan) => plan.workspaceId === workspace.id); const relatedTasks = tasks.filter((task) => task.workspaceId === workspace.id); return { ...workspace, planCount: relatedPlans.length, openTasks: relatedTasks.filter((task) => !["Hoàn thành", "Đóng", "Hủy"].includes(task.status)).length, progress: relatedTasks.length ? Math.round(relatedTasks.reduce((total, task) => total + task.progress, 0) / relatedTasks.length) : 0 }; }),
+  plans: plans.map((plan) => { const related = tasks.filter((task) => task.planId === plan.id); return { ...plan, progress: related.length ? Math.round(related.reduce((total, task) => total + task.progress, 0) / related.length) : 0 }; }), tasks,
 });
 
-const standardWorkspace: Workspace = { ...initialWorkspaces[0], id: "ws-standard", code: "WS-ERP-001", name: "Triển khai ERP & AI Platform", description: "Quy trình chuẩn từ khởi tạo Workspace đến nghiệm thu, hoàn thành và đóng kế hoạch.", type: "Chương trình", departmentIds: ["d1", "d2", "d3", "d4"], ownerId: "u1", memberIds: ["u1", "u3", "u4", "u5"], planCount: 1, openTasks: 4, progress: 0, status: "Hoạt động", deadline: "2026-10-30", createdAt: now, updatedAt: now };
-const standardPlan: Plan = { ...initialPlans[0], id: "plan-standard", code: "KH-ERP-001", name: "Kế hoạch triển khai ERP & AI Platform", workspaceId: "ws-standard", module: "ERP Core", ownerId: "u1", departmentId: "d1", startDate: "2026-08-15", deadline: "2026-10-30", progress: 0, status: "Đang thực hiện", priority: "Cao", objective: "Chuẩn hóa và đưa vào vận hành các phân hệ ERP cốt lõi.", scope: "OM, Tech, BA, QA và các đơn vị sử dụng.", output: "Hệ thống ERP được nghiệm thu và hướng dẫn vận hành.", approverId: "u2", createdAt: now, updatedAt: now };
-const standardTasks: Task[] = [
-  { ...initialTasks[0], id: "task-standard-1", code: "TASK-ERP-001", name: "Làm rõ yêu cầu nghiệp vụ", planId: "plan-standard", workspaceId: "ws-standard", ownerId: "u4", status: "Hoàn thành", progress: 100, checklistDone: 2, checklistTotal: 2, actualResult: "Đã chốt tài liệu yêu cầu nghiệp vụ.", startDate: "2026-08-15", deadline: "2026-08-20", createdAt: now, updatedAt: now },
-  { ...initialTasks[1], id: "task-standard-2", code: "TASK-ERP-002", name: "Thiết kế kế hoạch triển khai", planId: "plan-standard", workspaceId: "ws-standard", ownerId: "u1", status: "Đang thực hiện", progress: 60, checklistDone: 1, checklistTotal: 2, startDate: "2026-08-21", deadline: "2026-08-28", createdAt: now, updatedAt: now },
-  { ...initialTasks[2], id: "task-standard-3", code: "TASK-ERP-003", name: "Cấu hình và phát triển chức năng", planId: "plan-standard", workspaceId: "ws-standard", ownerId: "u3", status: "Chưa thực hiện", progress: 0, checklistDone: 0, checklistTotal: 3, startDate: "2026-08-29", deadline: "2026-09-25", createdAt: now, updatedAt: now },
-  { ...initialTasks[3], id: "task-standard-4", code: "TASK-ERP-004", name: "Kiểm thử và nghiệm thu", planId: "plan-standard", workspaceId: "ws-standard", ownerId: "u5", status: "Chờ phối hợp", progress: 0, checklistDone: 0, checklistTotal: 2, startDate: "2026-09-26", deadline: "2026-10-15", createdAt: now, updatedAt: now },
-];
-
-export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
-  ...withSummaries([standardWorkspace], [standardPlan], standardTasks),
-  approvals: [],
-  activities: [],
-  createWorkspace: (input) => set((state) => withSummaries([{ ...initialWorkspaces[0], ...input, id: uid(), code: `WS-NEW-${String(state.workspaces.length + 1).padStart(3, "0")}`, memberIds: input.memberIds?.length ? input.memberIds : [input.ownerId ?? "u1"], ownerId: input.ownerId ?? "u1", planCount: 0, openTasks: 0, progress: 0, status: "Hoạt động", createdAt: now, updatedAt: now, deadline: "2026-12-31" }, ...state.workspaces], state.plans, state.tasks)),
-  updateWorkspace: (id, input) => set((state) => ({ workspaces: state.workspaces.map((item) => item.id === id ? { ...item, ...input, updatedAt: now } : item) })),
-  deleteWorkspace: (id) => set((state) => ({ workspaces: state.workspaces.filter((item) => item.id !== id), plans: state.plans.filter((item) => item.workspaceId !== id), tasks: state.tasks.filter((item) => item.workspaceId !== id) })),
-  createPlan: (input) => set((state) => withSummaries(state.workspaces, [{ ...initialPlans[0], ...input, id: uid(), code: `KH-NEW-${String(state.plans.length + 1).padStart(3, "0")}`, module: "Chưa phân loại", ownerId: "u1", departmentId: "d1", progress: 0, status: "Nháp", objective: "Xác định sau khi tạo kế hoạch", scope: "Theo Workspace đã chọn", output: "Kế hoạch triển khai", approverId: "u2", createdAt: now, updatedAt: now }, ...state.plans], state.tasks)),
-  updatePlan: (id, input) => set((state) => {
-    const plans = state.plans.map((item) => item.id === id ? { ...item, ...input, updatedAt: now } : item);
-    const workspaceId = plans.find((plan) => plan.id === id)?.workspaceId;
-    const tasks = workspaceId ? state.tasks.map((task) => task.planId === id ? { ...task, workspaceId } : task) : state.tasks;
-    return withSummaries(state.workspaces, plans, tasks);
-  }),
-  deletePlan: (id) => set((state) => withSummaries(state.workspaces, state.plans.filter((item) => item.id !== id), state.tasks.filter((item) => item.planId !== id))),
-  createTask: (input) => set((state) => withSummaries(state.workspaces, state.plans, [{ ...initialTasks[0], ...input, id: uid(), code: `TASK-NEW-${String(state.tasks.length + 1).padStart(3, "0")}`, collaboratorIds: [], status: "Chưa thực hiện", startDate: now, progress: 0, checklistDone: 0, checklistTotal: 0, comments: 0, files: 0, labels: [], createdAt: now, updatedAt: now }, ...state.tasks])),
-  updateTask: (id, input) => set((state) => withSummaries(state.workspaces, state.plans, state.tasks.map((item) => item.id === id ? { ...item, ...input, updatedAt: now } : item))),
-  deleteTask: (id) => set((state) => withSummaries(state.workspaces, state.plans, state.tasks.filter((item) => item.id !== id))),
-  transitionPlan: (id, status, note) => {
-    let result: { ok: boolean; message?: string } = { ok: true };
-    set((state) => {
-      const plan = state.plans.find((item) => item.id === id);
-      if (!plan) return state;
-      const relatedTasks = state.tasks.filter((task) => task.planId === id);
-      if (status === "Đóng" && relatedTasks.some((task) => task.status !== "Hoàn thành" && task.status !== "Đóng")) {
-        result = { ok: false, message: "Chỉ được đóng khi các Task bắt buộc đã hoàn thành." };
-        return state;
-      }
-      if ((status === "Từ chối" || status === "Tạm dừng") && !note.trim()) {
-        result = { ok: false, message: "Vui lòng nhập lý do cho thao tác này." };
-        return state;
-      }
-      const approval: Approval = { id: uid(), code: `APR-${Date.now()}`, entityId: id, action: status, approverId: "u2", note, status: status === "Từ chối" ? "Từ chối" : status === "Chờ duyệt" ? "Chờ duyệt" : "Đã duyệt", createdAt: now, updatedAt: now };
-      const activity: ActivityLog = { id: uid(), code: `LOG-${Date.now()}`, entityId: id, actorId: "u1", action: `Chuyển trạng thái: ${status}`, description: note || "Cập nhật theo quy trình kế hoạch", status: "Thành công", createdAt: now, updatedAt: now };
-      return { ...withSummaries(state.workspaces, state.plans.map((item) => item.id === id ? { ...item, status, progress: status === "Hoàn thành" ? 100 : item.progress, updatedAt: now } : item), state.tasks), approvals: [approval, ...state.approvals], activities: [activity, ...state.activities] };
-    });
-    return result;
+export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
+  ...summarize([], [], []), approvals: [], activities: [],
+  hydrate: async () => {
+    const requestId = ++hydrateRequest;
+    const [workspaceRows, planRows, taskRows] = await Promise.all([http.get<Row[]>("/api/workspaces"), http.get<Row[]>("/api/plans"), http.get<Row[]>("/api/tasks")]);
+    if (requestId !== hydrateRequest) return;
+    set(summarize(workspaceRows.map(workspaceFrom), planRows.map(planFrom), taskRows.map(taskFrom)));
   },
+  createWorkspace: async (input) => { const workspace = await http.post<Row>("/api/workspaces", { code: code("WS"), name: input.name, description: input.description, type: input.type, ownerId: input.ownerId || null }); for (const userId of [...new Set(input.memberIds ?? [])]) await http.post(`/api/workspaces/${text(workspace.id)}/members`, { userId, role: "Thành viên" }); await get().hydrate(); },
+  updateWorkspace: async (id, input) => { await http.patch(`/api/workspaces/${id}`, { name: input.name, description: input.description, type: input.type, ownerId: input.ownerId || null }); await get().hydrate(); },
+  deleteWorkspace: async (id) => { await http.delete(`/api/workspaces?id=${id}`); await get().hydrate(); },
+  createPlan: async (input) => { await http.post("/api/plans", { code: code("KH"), name: input.name, workspaceId: input.workspaceId, module: "Chưa phân loại", objective: "", scope: "", output: "", startDate: input.startDate || null, deadline: input.deadline || null, priority: input.priority }); await get().hydrate(); },
+  updatePlan: async (id, input) => { await http.patch(`/api/plans/${id}`, input); await get().hydrate(); },
+  deletePlan: async (id) => { await http.delete(`/api/plans/${id}`); await get().hydrate(); },
+  createTask: async (input) => { const task = await http.post<Row>("/api/tasks", { code: code("TASK"), name: input.name, planId: input.planId, workspaceId: input.workspaceId, ownerId: input.ownerId || null, assigneeId: input.assigneeId || null, assigneeIds: input.collaboratorIds, startDate: new Date().toISOString(), deadline: input.deadline || null, priority: input.priority, note: input.note || null }); await get().hydrate(); const taskId = text(task.id); for (const content of input.checklistItems ?? []) await http.post(`/api/tasks/${taskId}/checklist`, { content }); for (const fileName of input.attachmentNames ?? []) await http.post(`/api/tasks/${taskId}/attachments`, { fileName, url: null }); await get().hydrate(); },
+  updateTask: async (id, input) => {
+    const previousTasks = get().tasks;
+    const previousPlans = get().plans;
+    const previousWorkspaces = get().workspaces;
+    const optimisticTasks = previousTasks.map((t) => (t.id === id ? { ...t, ...input } : t));
+    set(summarize(previousWorkspaces, previousPlans, optimisticTasks));
+    try {
+      const { status, collaboratorIds, ...patch } = input;
+      if (status) await http.post(`/api/tasks/${id}/transition`, { status, actualResult: input.actualResult, blockedReason: input.blockedReason });
+      const values = { ...patch, ...(collaboratorIds ? { assigneeIds: collaboratorIds } : {}) };
+      if (Object.keys(values).length) await http.patch(`/api/tasks/${id}`, values);
+      await get().hydrate();
+    } catch (err) {
+      set(summarize(previousWorkspaces, previousPlans, previousTasks));
+      throw err;
+    }
+  },
+  deleteTask: async (id) => {
+    const previousTasks = get().tasks;
+    const previousPlans = get().plans;
+    const previousWorkspaces = get().workspaces;
+    set(summarize(previousWorkspaces, previousPlans, previousTasks.filter((t) => t.id !== id)));
+    try {
+      await http.delete(`/api/tasks/${id}`);
+      await get().hydrate();
+    } catch (err) {
+      set(summarize(previousWorkspaces, previousPlans, previousTasks));
+      throw err;
+    }
+  },
+  transitionPlan: async (id, status, note) => { try { await http.post(`/api/plans/${id}/transition`, { status, note }); await get().hydrate(); return { ok: true }; } catch (error) { return { ok: false, message: error instanceof Error ? error.message : "Không thể chuyển trạng thái kế hoạch." }; } },
 }));
